@@ -1,0 +1,50 @@
+version: "2"
+
+services:
+    web:
+        image: nginx:latest
+        ports:
+            - "8080:80"
+        volumes:
+            - ./distillery:/distillery
+            - ./stilly.conf:/etc/nginx/conf.d/default.conf
+        links: 
+            - php
+        depends_on:
+            - php
+    php:
+        image: php56-mysqli-xdebug-redis-session
+        volumes:
+            - ./distillery:/distillery
+            - ./log.conf:/usr/local/etc/php-fpm.d/zz-log.conf
+            - ./distillery:/var/www/distillery/
+        links: 
+            - dbmysql
+        environment:
+                  PHP_IDE_CONFIG: serverName=docker
+                  PHP_XDEBUG_ENABLED: 1 # Set 1 to enable.
+                  XDEBUG_CONFIG: remote_host=10.254.254.254
+                  XDEBUG_CONFIG: idekey=PHPSTORM
+        depends_on:
+            - redis
+    dbmysql:
+        image: mysql:latest
+        container_name: dbmysql
+        restart: always
+        environment:
+           - MYSQL_ROOT_PASSWORD=C3jBVp0yn
+           - MYSQL_USER=root
+           - MYSQL_PASSWORD=C3jBVp0yn
+           - UPLOAD_SIZE=1G
+        volumes:
+           - ./dbmysql:/var/lib/mysql    
+    redis:
+        image: redis:latest
+        ports:
+           - '6379:6379'
+        volumes:
+           - ./redis.conf:/etc/redis.conf
+
+
+
+
