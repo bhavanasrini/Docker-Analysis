@@ -1,29 +1,36 @@
-FROM python:2.7-alpine
+FROM microsoft/dotnet:2.0-sdk as builder
 
-# Alternatively use ADD https:// (which will not be cached by Docker builder)
-RUN apk --no-cache add curl \ 
+ENV DOTNET_CLI_TELEMETRY_OPTOUT 1
+
+# Optimize for Docker builder caching by adding projects first.
+
+RUN mkdir -p /root/src/function
+WORKDIR /root/src/function
+COPY ./function/Function.csproj  .
+
+WORKDIR /root/src/
+COPY ./root.csproj  .
+RUN dotnet restore ./root.csproj
+
+COPY .  .
+
+RUN dotnet publish -c release -o published
+
+FROM microsoft/dotnet:2.0-runtime
+
+RUN apt-get update -qy \
+    && apt-get install -qy curl ca-certificates --no-install-recommends \ 
     && echo "Pulling watchdog binary from Github." \
     && curl -sSL https://github.com/openfaas/faas/releases/download/0.6.9/fwatchdog > /usr/bin/fwatchdog \
     && chmod +x /usr/bin/fwatchdog \
-    && apk del curl --no-cache
+    && apt-get -qy remove curl \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /root/
+COPY --from=builder /root/src/published .
 
-COPY index.py           .
-COPY requirements.txt   .
-RUN pip install -r requirements.txt
-
-RUN mkdir -p function
-RUN touch ./function/__init__.py
-WORKDIR /root/function/
-COPY function/requirements.txt	.
-RUN pip install -r requirements.txt
-
-WORKDIR /root/
-COPY function           function
-
-ENV fprocess="python index.py"
-
-HEALTHCHECK --interval=1s CMD [ -e /tmp/.lock ] || exit 1
-
+ENV fprocess="dotnet ./root.dll"
+EXPOSE 8080
 CMD ["fwatchdog"]
+
